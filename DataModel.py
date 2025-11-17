@@ -140,6 +140,37 @@ class Stack:
     def __repr__(self):
         return f"Stack({self.cards}, cont={self.continuous_length})"
 
+class Stash:
+    def __init__(self):
+        self.cards: Set[Card] = set()
+        self.limit = 3
+
+    def can_add(self) -> bool:
+        return len(self.cards) < self.limit
+
+    def add(self, card: Card):
+        if not self.can_add():
+            raise ValueError("Stash is full")
+        self.cards.add(card)
+
+    def reduce_limit(self):
+        self.limit = max(0, self.limit - 1)
+
+    def remove(self, card: Card) -> Card:
+        """按 value 删除对应卡"""
+        for c in list(self.cards):
+            if c == card:
+                self.cards.remove(c)
+                return c
+        raise ValueError("Card not found in stash")
+
+    def find_by_color(self, color: int) -> List[Card]:
+        return [c for c in self.cards if c.color == color]
+
+    def __repr__(self):
+        return f"Stash({self.cards})"
+
+
 
 class Status:
     def __init__(self):
