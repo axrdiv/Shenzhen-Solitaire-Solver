@@ -188,142 +188,138 @@ class SortedArea:
 
 class Status:
     def __init__(self):
-        self.unused_card: List[int] = [1] * 40
-        self.stacks: List[Stack] = [Stack() for _ in range(8)]
-        self.used_stash = 0
-        self.stash: Set[Card] = Set()
-        self.after_sorting: List[Stack] = list(Stack() for _ in range(3))
+        self.stacks = [Stack() for _ in range(8)]
+        self.stash = Stash()
+        self.sorted = SortedArea()
 
+    def move(self, from_area: Area, from_idx, to_area: Area, to_idx=None, count=1):
+        """统一的移动函数"""
 
-    def move(self):
-        pass
-
-    def pop(self, area, stack_idx: int = 0, card: Card = None):
-        """从盘面中移除一张牌，会导致unused_card变化"""
-        if area == Area.STACK:
-            card = self.stacks[stack_idx].pop()
+        # --- 取牌 ---
+        if from_area == Area.STACK:
+            cards = self.stacks[from_idx].move(count)
+        elif from_area == Area.STASH:
+            if count != 1:
+                raise ValueError("Stash move count must be 1")
+            cards = [self.stash.remove(from_idx)]
         else:
-            if card.type == CardType.NUMBER:
-                new_set = set()
-                for stash_card in self.stash:
-                    if stash_card.value == card.value:
-                        card = stash_card
-                    else:
-                        new_set.add(stash_card)
-                self.stash = new_set
-            # CardType 是 FLOWER
-            else:
-                new_set = set()
-                for stash_card in self.stash:
-                    if stash_card.value == card.value:
-                        card = stash_card
-                        self.unused_card[card.value] = 0
-                    else:
-                        new_set.add(stash_card)
-                self.stash = new_set
+            raise ValueError("Cannot move out of sorted")
 
-        return card
+        # --- 放牌 ---
+        if to_area == Area.STACK:
+            for c in cards:
+                self.stacks[to_idx].append(c)
 
-    
-    def _check_card_can_auto_remove(self, card) -> bool:
+        elif to_area == Area.STASH:
+            if len(cards) != 1:
+                raise ValueError("Can only move 1 card into stash")
+            self.stash.add(cards[0])
+
+        else:
+            raise ValueError("Cannot move into sorted")
+
+    # ========== 状态转移：pop ==========
+    def pop(self, area: Area, idx: int = None, card: Card = None) -> Card:
+        if area == Area.STACK:
+            removed = self.stacks[idx].pop()
+
+        elif area == Area.STASH:
+            removed = self.stash.remove(card)
+
+        else:
+            raise ValueError("Cannot pop from SORTED area")
+
+        return removed
+
+    def _can_auto_remove_card(self, card: Card) -> bool:
+        """数字牌和特殊牌自动归位判断"""
+
         if card.type == CardType.SPECIAL:
             return True
-        elif card.type == CardType.NUMBER:
-            sorted_top = self.after_sorting[card.color].top()
-            if sorted_top:
-                # 如果正好到了这个数字
-                if card.num == sorted_top.num + 1:
-                    # 如果已排序的是数字是 1 ，则 2 号牌不需要等其他 1 的依赖
-                    if sorted_top.num == 1:
-                        return True
-                    # 查看是否有其他依赖它的卡片，如果没有则可以自动移除这张卡片
-                    if not any([self.unused_card[x * 9 + sorted_top.num] for x in range(3)]):
-                        return True
-            else:
-                return True
+
+        if card.type == CardType.NUMBER:
+            top = self.sorted.top(card.color)
+            if not top:
+                return card.num == 1
+
+            if card.num == top.num + 1:
+                # 如果已排序区域的顶为1，则同色的2不需要考虑其他1的依赖。
+                if top.num == 1:
+                    return True
+                else:
+                    sorted_color_1 = self.sorted.top((card.color+1)%3)
+                    sorted_color_2 = self.sorted.top((card.color+2)%3)
+                    if sorted_color_1 and sorted_color_2:
+                        if min(sorted_color_1.num ,sorted_color_2.num) >= card.num:
+                            return True
+        return False
+
+    def _auto_remove_flowers(self) -> bool:
+        """花牌 4 张同色自动移除"""
+
+        flower_by_color = {0: [], 1: [], 2: []}
+
+        # stack 顶部
+        for idx, st in enumerate(self.stacks):
+            t = st.top()
+            if t and t.type == CardType.FLOWER:
+                flower_by_color[t.color].append((Area.STACK, idx, t))
+
+        # stash
+        for c in self.stash.cards:
+            if c.type == CardType.FLOWER:
+                flower_by_color[c.color].append((Area.STASH, c.value, c))
+
+        # check
+        for color, items in flower_by_color.items():
+            if len(items) == 4:
+                # --- 检查是否满足移除条件 ---
+                # 原版逻辑是：
+                # 1. 如果 (len(status.stash) < 3 - status.used_stash)
+                # 2. 或者，如果 Stash 中已存在该 color 的牌
+                # 满足任一条件即可移除。
+                
+                has_free_slot_condition = self.stash.can_add()
+                has_card_in_stash = any([card.color == color for card in self.stash if card.type == CardType.FLOWER])
+                if has_free_slot_condition or has_card_in_stash:
+                    for area, id_, card in items:
+                        if area == Area.STACK:
+                            self.stacks[id_].pop()
+                        else:
+                            self.stash.remove(card)
+                    self.stash.reduce_limit()
+                    return True
+        return False
 
     def auto_remove(self):
-        for idx, st in enumerate(self.stacks):
-            card = st.top()
-            if self._check_card_can_auto_remove(card):
-                self.after_sorting[card.color].append(card)
-                self.pop(Area.STACK, stack_idx=idx)
-                return self.auto_remove()
+        """自动移除所有可以移除的牌"""
 
-        for card in self.stash:
-            if self._check_card_can_auto_remove(card):
-                self.after_sorting[card.color].append(card)
-                self.pop(Area.STASH, card=card)
-                return self.auto_remove()
+        changed = True
+        while changed:
+            changed = False
 
+            # ------- 1. 自动移除 stack 顶部的牌 -------
+            for idx, st in enumerate(self.stacks):
+                top = st.top()
+                if top and self._can_auto_remove_card(top):
+                    self.pop(Area.STACK, idx)
+                    self.sorted.push(top)
+                    changed = True
+                    break  # 重头来过
 
+            if changed:
+                continue
 
-def check_flower_card(status: Status):
-    """
-    检查并处理桌面上的特殊牌（移除）和花色牌（凑齐4张后移除）。
-    这是一个递归函数，任何状态变更（移除特殊牌或花色牌）都会触发一次新的检查。
-    """
-    
-    # 1. 收集所有暴露的花牌位置
-    #    使用列表，索引 0, 1, 2 对应牌的 color
-    flower_card_locations: List[Set] = [set() for _ in range(3)]
+            # ------- 2. 自动移除 stash 中的牌 -------
+            for card in list(self.stash.cards):
+                if self._can_auto_remove_card(card):
+                    self.stash.remove(card)
+                    self.sorted.push(card)
+                    changed = True
+                    break
 
-    # 2. 检查牌堆 (Stacks)
-    for idx, st in enumerate(status.stacks):
-        if not st.cards:  # 跳过空牌堆
-            continue
-            
-        top_card = st.top()
+            # ------- 3. 自动移除花牌（四张齐） -------
+            if changed:
+                continue
 
-        # 规则 1: 优先移除特殊牌
-        if top_card.type == CardType.SPECIAL:
-            st.pop()
-            # 状态已改变，必须从头重新检查
-            return check_flower_card(status) 
-
-        # 规则 2: 记录暴露的花牌
-        if top_card.type == CardType.FLOWER:
-            flower_card_locations[top_card.color].add((Area.STACK, idx))
-
-    # 3. 检查 Stash 区
-    for card in status.stash:
-        if card.type == CardType.FLOWER:
-            # 假设 card.value 是 Stash 中花牌的唯一标识
-            flower_card_locations[card.color].add((Area.STASH, card.value))
-
-    # 4. 检查是否凑齐了4张花牌
-    for color, locations in enumerate(flower_card_locations):
-        if len(locations) == 4:
-            
-            # --- 检查是否满足移除条件 ---
-            # 原版逻辑是：
-            # 1. 如果 (len(status.stash) < 3 - status.used_stash)
-            # 2. 或者，如果 Stash 中已存在该 color 的牌
-            # 满足任一条件即可移除。
-            
-            has_free_slot_condition = (len(status.stash) < 3 - status.used_stash)
-            has_card_in_stash = any(card.color == color for card in status.stash)
-
-            if has_free_slot_condition or has_card_in_stash:
-                
-                # --- 执行移除 ---
-                
-                # a) 从 Stacks 中移除
-                for area, val in locations:
-                    if area == Area.STACK:
-                        status.stacks[val].pop()
-
-                # b) 从 Stash 中移除 (使用集合推导式更简洁)
-                # 检查是否需要更新 stash (仅当花牌来源包含 STASH 时)
-                if any(area == Area.STASH for area, _ in locations):
-                    status.stash = {card for card in status.stash if card.color != color}
-
-                # c) 增加已使用的 Stash 计数 (只加一次!)
-                status.used_stash += 1
-                
-                # 状态已改变，必须从头重新检查 (新暴露的牌可能是特殊牌)
-                return check_flower_card(status)
-
-    # 如果代码运行到这里，说明没有特殊牌，也没有凑齐的花牌
-    # 状态是稳定的，函数结束。
-    # (原函数没有返回值，这里保持一致)
+            changed |= self._auto_remove_flowers()
