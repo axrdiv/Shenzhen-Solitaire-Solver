@@ -164,6 +164,9 @@ class Status:
             if sorted_top:
                 # 如果正好到了这个数字
                 if card.num == sorted_top.num + 1:
+                    # 如果已排序的是数字是 1 ，则 2 号牌不需要等其他 1 的依赖
+                    if sorted_top.num == 1:
+                        return True
                     # 查看是否有其他依赖它的卡片，如果没有则可以自动移除这张卡片
                     if not any([self.unused_card[x * 9 + sorted_top.num] for x in range(3)]):
                         return True
