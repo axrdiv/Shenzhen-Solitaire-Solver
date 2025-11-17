@@ -108,6 +108,67 @@ class Status:
         self.stash: Set[Card] = Set()
         self.after_sorting: List[Stack] = list(Stack() for _ in range(3))
 
+
+    def move(self):
+        pass
+
+    def pop(self, area, stack_idx: int = 0, card: Card = None):
+        """从盘面中移除一张牌，会导致unused_card变化"""
+        if area == Area.STACK:
+            card = self.stacks[stack_idx].pop()
+        else:
+            if card.type == CardType.NUMBER:
+                new_set = set()
+                for stash_card in self.stash:
+                    if stash_card.value == card.value:
+                        card = stash_card
+                    else:
+                        new_set.add(stash_card)
+                self.stash = new_set
+            # CardType 是 FLOWER
+            else:
+                new_set = set()
+                for stash_card in self.stash:
+                    if stash_card.value == card.value:
+                        card = stash_card
+                        self.unused_card[card.value] = 0
+                    else:
+                        new_set.add(stash_card)
+                self.stash = new_set
+
+        return card
+
+    
+    def _check_card_can_auto_remove(self, card) -> bool:
+        if card.type == CardType.SPECIAL:
+            return True
+        elif card.type == CardType.NUMBER:
+            sorted_top = self.after_sorting[card.color].top()
+            if sorted_top:
+                # 如果正好到了这个数字
+                if card.num == sorted_top.num + 1:
+                    # 查看是否有其他依赖它的卡片，如果没有则可以自动移除这张卡片
+                    if not any([self.unused_card[x * 9 + sorted_top.num] for x in range(3)]):
+                        return True
+            else:
+                return True
+
+    def auto_remove(self):
+        for idx, st in enumerate(self.stacks):
+            card = st.top()
+            if self._check_card_can_auto_remove(card):
+                self.after_sorting[card.color].append(card)
+                self.pop(Area.STACK, stack_idx=idx)
+                return self.auto_remove()
+
+        for card in self.stash:
+            if self._check_card_can_auto_remove(card):
+                self.after_sorting[card.color].append(card)
+                self.pop(Area.STASH, card=card)
+                return self.auto_remove()
+
+
+
 def check_flower_card(status: Status):
     """
     检查并处理桌面上的特殊牌（移除）和花色牌（凑齐4张后移除）。
