@@ -72,24 +72,32 @@ class Stack:
                 self.continuous_length += 1
             else:
                 break
-        
-    def pop(self, count = 1):
+    
+    def move(self, count) -> List[Card]:
         ret: List[Card] = list()
-
         # 移除旧的卡片
         for _ in range(count):
             ret.append(self.cards.pop())
-        
         self.continuous_length = max(0, self.continuous_length - count)
-        self.count_continuous_length()
-
-        return Stack(cards_list=reversed(ret))
+        if self.continuous_length == 0:
+            self.count_continuous_length()
+        return reversed(ret)
+        
+    def pop(self) -> Card:
+        card = self.cards.pop()
+        self.continuous_length = max(0, self.continuous_length - 1)
+        if self.continuous_length == 0:
+            self.count_continuous_length()
+        return card
 
     def top(self) -> Optional[Card]:
         if len(self.cards):
             return self.cards[-1]
         else:
             return None
+    
+    def append(self, card: Card):
+        self.cards.append(card)
 
 
 class Status:
