@@ -32,16 +32,16 @@ class Card:
     
     @property
     def color(self) -> int:
-        if self.type() == CardType.NUMBER:
+        if self.type == CardType.NUMBER:
             return self.value // 9
-        elif self.type() == CardType.FLOWER:
+        elif self.type == CardType.FLOWER:
             return (self.value - 27) // 4
         else:
             raise ValueError
 
     @property
     def num(self) -> int:
-        if self.type() == CardType.NUMBER:
+        if self.type == CardType.NUMBER:
             return self.value % 9 + 1
         else:
             return 0
