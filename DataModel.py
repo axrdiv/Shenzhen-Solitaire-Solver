@@ -65,6 +65,11 @@ class Card:
 
 
 class Stack:
+    """
+    牌堆（列）
+    cards: bottom ... top (length -1 为顶)
+    continuous_length: 从顶往下连续可作为一组移动的长度（>=0）
+    """
     def __init__(self, cards_list: Optional[List[Card]] = None, continuous_length: int = 0, stack: Optional['Stack'] = None):
         if stack:
             self.cards = [Card(c.value) for c in stack.cards]
@@ -79,42 +84,61 @@ class Stack:
             self.cards: List[Card] = list()
             self.continuous_length: int = 0
 
-    def count_continuous_length(self):
-        if len(self.cards) < 2:
+    def recompute_continuous_length(self):
+        # 计算从顶开始的连续序列长度（规则：数字牌，颜色交替，数字依次递减1）
+        n = len(self.cards)
+        if n == 0:
+            self.continuous_length = 0
             return
-        for idx in reversed(range(1, len(self.cards) - self.continuous_length)):
-            if self.cards[idx].type == CardType.NUMBER and self.cards[idx-1].type == CardType.NUMBER \
-                  and self.cards[idx].color != self.cards[idx-1].color \
-                  and self.cards[idx].num == self.cards[idx-1].num - 1:
-                self.continuous_length += 1
+        # 最少 1（顶张自己）
+        length = 1
+        for i in range(n - 1, 0, -1):
+            cur = self.cards[i]
+            prev = self.cards[i - 1]
+            if cur.type == CardType.NUMBER and prev.type == CardType.NUMBER and cur.color != prev.color and cur.num == prev.num - 1:
+                length += 1
             else:
                 break
+        self.continuous_length = length
     
-    def move(self, count) -> List[Card]:
-        ret: List[Card] = list()
-        # 移除旧的卡片
-        for _ in range(count):
-            ret.append(self.cards.pop())
+    def move_group(self, count: int) -> List[Card]:
+        """
+        从栈顶移动 count 张（保证 count <= continuous_length）
+        返回的列表顺序是从底到顶（即被移动组在目标堆 push 时，逐个 push 可以保持原顺序）
+        """
+        if count <= 0:
+            return []
+        if count > len(self.cards):
+            raise IndexError("not enough cards to move")
+        if count > self.continuous_length:
+            raise ValueError(f"cannot move {count}, continuous_length={self.continuous_length}")
+        start = len(self.cards) - count
+        group = self.cards[start:]
+        self.cards = self.cards[:start]
         self.continuous_length = max(0, self.continuous_length - count)
         if self.continuous_length == 0:
-            self.count_continuous_length()
-        return reversed(ret)
+            self.recompute_continuous_length()
+        return group
+
         
     def pop(self) -> Card:
+        if not self.cards:
+            raise IndexError("pop from empty stack")
         card = self.cards.pop()
         self.continuous_length = max(0, self.continuous_length - 1)
         if self.continuous_length == 0:
-            self.count_continuous_length()
+            self.recompute_continuous_length()
         return card
 
     def top(self) -> Optional[Card]:
-        if len(self.cards):
-            return self.cards[-1]
-        else:
-            return None
-    
-    def append(self, card: Card):
+        return self.cards[-1] if self.cards else None
+
+    def push(self, card: Card):
         self.cards.append(card)
+        self.recompute_continuous_length() 
+    
+    def __repr__(self):
+        return f"Stack({self.cards}, cont={self.continuous_length})"
 
 
 class Status:
