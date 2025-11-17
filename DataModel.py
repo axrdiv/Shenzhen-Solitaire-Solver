@@ -46,6 +46,23 @@ class Card:
         else:
             return 0
 
+    def __repr__(self):
+        if self.type == CardType.NUMBER:
+            return f"N({self.color},{self.num})"
+        elif self.type == CardType.FLOWER:
+            return f"F({self.color},{self.value})"
+        else:
+            return f"S({self.value})"
+
+    def __hash__(self):
+        # stash 使用 set，需要 hashable
+        return hash(self.value)
+
+    def __eq__(self, other):
+        if not isinstance(other, Card):
+            return False
+        return self.value == other.value
+
 
 class Stack:
     def __init__(self, cards_list: Optional[List[Card]] = None, continuous_length: int = 0, stack: Optional['Stack'] = None):
