@@ -1,5 +1,5 @@
 
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Iterator
 from enum import Enum
 
 class CardType(Enum):
@@ -46,7 +46,7 @@ class Card:
         else:
             return 0
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if self.type == CardType.NUMBER:
             return f"N({self.color},{self.num})"
         elif self.type == CardType.FLOWER:
@@ -54,11 +54,11 @@ class Card:
         else:
             return f"S({self.value})"
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         # stash 使用 set，需要 hashable
         return hash(self.value)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, Card):
             return False
         return self.value == other.value
@@ -84,7 +84,7 @@ class Stack:
             self.cards: List[Card] = list()
             self.continuous_length: int = 0
 
-    def recompute_continuous_length(self):
+    def recompute_continuous_length(self) -> None:
         # 计算从顶开始的连续序列长度（规则：数字牌，颜色交替，数字依次递减1）
         n = len(self.cards)
         if n == 0:
@@ -133,27 +133,27 @@ class Stack:
     def top(self) -> Optional[Card]:
         return self.cards[-1] if self.cards else None
 
-    def push(self, card: Card):
+    def push(self, card: Card) -> None:
         self.cards.append(card)
         self.recompute_continuous_length() 
     
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Stack({self.cards}, cont={self.continuous_length})"
 
 class Stash:
     def __init__(self):
         self.cards: Set[Card] = set()
-        self.limit = 3
+        self.limit: int = 3
 
     def can_add(self) -> bool:
         return len(self.cards) < self.limit
 
-    def add(self, card: Card):
+    def add(self, card: Card) -> None:
         if not self.can_add():
             raise ValueError("Stash is full")
         self.cards.add(card)
 
-    def reduce_limit(self):
+    def reduce_limit(self) -> None:
         self.limit = max(0, self.limit - 1)
 
     def remove(self, card: Card) -> Card:
@@ -167,32 +167,35 @@ class Stash:
     def find_by_color(self, color: int) -> List[Card]:
         return [c for c in self.cards if c.color == color]
 
-    def __repr__(self):
+    def __iter__(self) -> Iterator[Card]:
+        """支持 for card in self.stash 迭代"""
+        return iter(self.cards)
+
+    def __repr__(self) -> str:
         return f"Stash({self.cards})"
 
 class SortedArea:
     """按颜色存储清除过的牌"""
     def __init__(self):
-        self.stacks = [Stack() for _ in range(3)]
+        self.stacks: List[Stack] = [Stack() for _ in range(3)]
 
-    def push(self, card: Card):
+    def push(self, card: Card) -> None:
         self.stacks[card.color].append(card)
 
     def top(self, color: int) -> Optional[Card]:
         return self.stacks[color].top()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Sorted({self.stacks})"
-
 
 
 class Status:
     def __init__(self):
-        self.stacks = [Stack() for _ in range(8)]
-        self.stash = Stash()
-        self.sorted = SortedArea()
+        self.stacks: List[Stack] = [Stack() for _ in range(8)]
+        self.stash: Stash = Stash()
+        self.sorted: SortedArea = SortedArea()
 
-    def move(self, from_area: Area, from_idx, to_area: Area, to_idx=None, count=1):
+    def move(self, from_area: Area, from_idx: int, to_area: Area, to_idx: Optional[int] = None, count: int = 1) -> None:
         """统一的移动函数"""
 
         # --- 取牌 ---
@@ -291,7 +294,7 @@ class Status:
                     return True
         return False
 
-    def auto_remove(self):
+    def auto_remove(self) -> None:
         """自动移除所有可以移除的牌"""
 
         changed = True
