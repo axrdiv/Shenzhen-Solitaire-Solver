@@ -170,6 +170,20 @@ class Stash:
     def __repr__(self):
         return f"Stash({self.cards})"
 
+class SortedArea:
+    """按颜色存储清除过的牌"""
+    def __init__(self):
+        self.stacks = [Stack() for _ in range(3)]
+
+    def push(self, card: Card):
+        self.stacks[card.color].append(card)
+
+    def top(self, color: int) -> Optional[Card]:
+        return self.stacks[color].top()
+
+    def __repr__(self):
+        return f"Sorted({self.stacks})"
+
 
 
 class Status:
