@@ -79,7 +79,7 @@ class Stack:
             if continuous_length:
                 self.continuous_length = continuous_length
             else:
-                self.count_continuous_length()
+                self.recompute_continuous_length()
         else:
             self.cards: List[Card] = list()
             self.continuous_length: int = 0
@@ -140,6 +140,11 @@ class Stack:
     def __repr__(self) -> str:
         return f"Stack({self.cards}, cont={self.continuous_length})"
 
+    def __deepcopy__(self, memo):
+        new_stack = Stack(cards_list=[Card(c.value) for c in self.cards])
+        new_stack.continuous_length = self.continuous_length
+        return new_stack
+
 class Stash:
     def __init__(self):
         self.cards: Set[Card] = set()
@@ -174,6 +179,12 @@ class Stash:
     def __repr__(self) -> str:
         return f"Stash({self.cards})"
 
+    def __deepcopy__(self, memo):
+        new_stash = Stash()
+        new_stash.cards = {Card(c.value) for c in self.cards}
+        new_stash.limit = self.limit
+        return new_stash
+
 class SortedArea:
     """按颜色存储清除过的牌"""
     def __init__(self):
@@ -188,12 +199,26 @@ class SortedArea:
     def __repr__(self) -> str:
         return f"Sorted({self.stacks})"
 
+    def __deepcopy__(self, memo):
+        new_sorted = SortedArea()
+        new_sorted.stacks = [s.__deepcopy__(memo) for s in self.stacks]
+        return new_sorted
+
 
 class Status:
     def __init__(self):
         self.stacks: List[Stack] = [Stack() for _ in range(8)]
         self.stash: Stash = Stash()
         self.sorted: SortedArea = SortedArea()
+        self.special_card_removed: bool = False
+
+    def __deepcopy__(self, memo):
+        new_status = Status()
+        new_status.stacks = [s.__deepcopy__(memo) for s in self.stacks]
+        new_status.stash = self.stash.__deepcopy__(memo)
+        new_status.sorted = self.sorted.__deepcopy__(memo)
+        new_status.special_card_removed = self.special_card_removed
+        return new_status
 
     def move(self, from_area: Area, from_idx: int, to_area: Area, to_idx: Optional[int] = None, count: int = 1) -> None:
         """统一的移动函数"""
@@ -305,8 +330,11 @@ class Status:
             for idx, st in enumerate(self.stacks):
                 top = st.top()
                 if top and self._can_auto_remove_card(top):
-                    self.pop(Area.STACK, idx=idx)
-                    self.sorted.push(top)
+                    card = self.pop(Area.STACK, idx=idx)
+                    if card.type == CardType.SPECIAL:
+                        self.special_card_removed = True
+                    else:
+                        self.sorted.push(card)
                     changed = True
                     break # 状态已变，从while开头重新检查
             if changed:
@@ -314,8 +342,11 @@ class Status:
 
             for card in list(self.stash):
                 if self._can_auto_remove_card(card):
-                    self.pop(Area.STASH, card=card)
-                    self.sorted.push(card)
+                    card = self.pop(Area.STASH, card=card)
+                    if card.type == CardType.SPECIAL:
+                        self.special_card_removed = True
+                    else:
+                        self.sorted.push(card)
                     changed = True
                     break # 状态已变，从while开头重新检查
             if changed:
