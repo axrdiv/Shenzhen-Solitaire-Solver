@@ -180,7 +180,7 @@ class SortedArea:
         self.stacks: List[Stack] = [Stack() for _ in range(3)]
 
     def push(self, card: Card) -> None:
-        self.stacks[card.color].append(card)
+        self.stacks[card.color].push(card)
 
     def top(self, color: int) -> Optional[Card]:
         return self.stacks[color].top()
@@ -220,6 +220,7 @@ class Status:
 
         else:
             raise ValueError("Cannot move into sorted")
+        self.auto_remove()
 
     # ========== 状态转移：pop ==========
     def pop(self, area: Area, idx: int = None, card: Card = None) -> Card:
@@ -296,33 +297,31 @@ class Status:
 
     def auto_remove(self) -> None:
         """自动移除所有可以移除的牌"""
-
         changed = True
         while changed:
             changed = False
 
-            # ------- 1. 自动移除 stack 顶部的牌 -------
+            # 1. 检查并移除Stask和Stash中的牌
             for idx, st in enumerate(self.stacks):
                 top = st.top()
                 if top and self._can_auto_remove_card(top):
-                    self.pop(Area.STACK, idx)
+                    self.pop(Area.STACK, idx=idx)
                     self.sorted.push(top)
                     changed = True
-                    break  # 重头来过
-
+                    break # 状态已变，从while开头重新检查
             if changed:
                 continue
 
-            # ------- 2. 自动移除 stash 中的牌 -------
-            for card in list(self.stash.cards):
+            for card in list(self.stash):
                 if self._can_auto_remove_card(card):
-                    self.stash.remove(card)
+                    self.pop(Area.STASH, card=card)
                     self.sorted.push(card)
                     changed = True
-                    break
-
-            # ------- 3. 自动移除花牌（四张齐） -------
+                    break # 状态已变，从while开头重新检查
             if changed:
                 continue
 
-            changed |= self._auto_remove_flowers()
+            # 2. 检查并移除花牌
+            if self._auto_remove_flowers():
+                changed = True
+                continue
